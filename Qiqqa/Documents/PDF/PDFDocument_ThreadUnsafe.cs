@@ -650,8 +650,27 @@ namespace Qiqqa.Documents.PDF.ThreadUnsafe
 
         public int PageLastRead
         {
-            get => Convert.ToInt32(dictionary["PageLastRead"] ?? 0);
-            set => dictionary["PageLastRead"] = value;
+            get
+            {
+                int value = Convert.ToInt32(dictionary["PageLastRead"] ?? 0);
+                int pageCount = this.SafePageCount;
+                if (value < 0 || value > pageCount)
+                {
+                    Logging.Error("Reading an invalid PageLastRead value {0} from the database, while the total page count is {1}", dictionary["PageLastRead"], SafePageCount);
+                    value = Math.Max(0, Math.Min(pageCount, value));
+                }
+                return value;
+            }
+            set
+            {
+                int pageCount = this.SafePageCount;
+                if (value < 0 || value > pageCount)
+                {
+                    Logging.Error("Setting an invalid PageLastRead value {0}, while the total page count is {1}", value, SafePageCount);
+                    value = Math.Max(0, Math.Min(pageCount, value));
+                }
+                dictionary["PageLastRead"] = value;
+            }
         }
 
         public bool Deleted
@@ -1052,7 +1071,7 @@ namespace Qiqqa.Documents.PDF.ThreadUnsafe
         }
 #endif
 
-        public void CopyMetaData(PDFDocument_ThreadUnsafe pdf_document_template, bool copy_fingerprint = true)
+        public void CopyMetaData(PDFDocument_ThreadUnsafe pdf_document_template, bool copy_fingerprint = true, bool copy_filetype = true)
         {
             // TODO: do a proper merge, based on flags from the caller about to do and what to pass:
             HashSet<string> keys = new HashSet<string>(dictionary.Keys);
@@ -1066,6 +1085,7 @@ namespace Qiqqa.Documents.PDF.ThreadUnsafe
                 if (null == dictionary[k])
                 {
                     // no collision possible: overwriting NULL or empty/non-existing slot, so we're good
+                    dictionary[k] = pdf_document_template.dictionary[k];
                 }
                 else
                 {
@@ -1093,6 +1113,22 @@ namespace Qiqqa.Documents.PDF.ThreadUnsafe
                             case "DateLastModified":
                                 // take latest, unless the last mod dates match the DateAddedToDatabase records: in that case, use the picked DateAddedToDatabase
                                 break;
+
+                            case "FileType":
+                                // do not copy old value into current record?
+                                if (copy_filetype)
+                                {
+                                    dictionary[k] = pdf_document_template.dictionary[k];
+                                }
+                                break;
+
+                            case "Fingerprint":
+                                // do not copy old value into current record?
+                                if (copy_fingerprint)
+                                {
+                                    dictionary[k] = pdf_document_template.dictionary[k];
+                                }
+                                break;
                         }
                     }
                 }
@@ -1114,7 +1150,10 @@ namespace Qiqqa.Documents.PDF.ThreadUnsafe
             dictionary["Comments"] = pdf_document_template.dictionary["Comments"];
             dictionary["Deleted"] = pdf_document_template.dictionary["Deleted"];
             dictionary["DownloadLocation"] = pdf_document_template.dictionary["DownloadLocation"];
-            dictionary["FileType"] = pdf_document_template.dictionary["FileType"];
+            if (copy_filetype)
+            {
+                dictionary["FileType"] = pdf_document_template.dictionary["FileType"];
+            }
             if (copy_fingerprint)
             {
                 dictionary["Fingerprint"] = pdf_document_template.dictionary["Fingerprint"];
@@ -1124,7 +1163,6 @@ namespace Qiqqa.Documents.PDF.ThreadUnsafe
             dictionary["PageLastRead"] = pdf_document_template.dictionary["PageLastRead"];
             dictionary["Rating"] = pdf_document_template.dictionary["Rating"];
             dictionary["ReadingStage"] = pdf_document_template.dictionary["ReadingStage"];
-            dictionary["Tags"] = pdf_document_template.dictionary["Tags"];
             dictionary["Tags"] = pdf_document_template.dictionary["Tags"];
             dictionary["Title"] = pdf_document_template.dictionary["Title"];
             dictionary["TitleSuggested"] = pdf_document_template.dictionary["TitleSuggested"];
